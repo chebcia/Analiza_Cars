@@ -1,0 +1,1128 @@
+---
+title: "Projekt Metody Statystyczne - Dokumentacja"
+author: "Autorzy: Mateusz Adamczyk, Natalia Cheba, Tomasz Depczyński, Julia Kwapień, Anna Szkoda, Maciej Zajęcki"
+date: "Data sprawozdania: 07-06-2020"
+output: html_document
+---
+```{r, echo=FALSE, results=FALSE,message=FALSE}
+library(ggplot2)
+library(visreg)
+library(knitr)
+library(corrplot)
+library(ggcorrplot)
+library(dplyr)
+library(knitr)
+library(readr)
+library(xlsx)
+Autko <- read_csv("Autko.csv")
+```
+
+## Przygotowanie danych do dalszej analizy
+
+##### - Zamiana nazwy kolumn na odpowiednie nazwy
+```{r}
+library(tidyr)
+names(Autko)[1] <- "mpg"
+names(Autko)[2] <- "cylinders"
+names(Autko)[3] <- "displacement"
+names(Autko)[4] <- "horsepower"
+names(Autko)[5] <- "weight"
+names(Autko)[6] <- "acceleration"
+names(Autko)[7] <- "model_year"
+names(Autko)[8] <- "origin"
+names(Autko)[9] <- "car_name"
+```
+```{r}
+```
+ 
+##### - Zmienienie na odpowiednie typy danych
+
+```{r, message=FALSE, results=FALSE}
+Autko$car_name<-as.character(Autko$car_name)
+Autko$cylinders = Autko$cylinders %>% factor(labels = sort(unique(Autko$cylinders)))
+Autko$model_year = Autko$model_year %>% factor(labels = sort(unique(Autko$model_year)))
+Autko$origin = Autko$origin %>% factor(labels = sort(unique(Autko$origin)))
+Autko$horsepower<-as.numeric(Autko$horsepower)
+```
+
+
+##### - Oddzielenie marki i modelu 
+
+```{r, message=FALSE, results=FALSE}
+Autko <- separate(Autko, col = c("car_name"), into = c("brand", "model"), sep = " ", extra = "merge")
+```
+
+
+##### - Zamiana "?" na wartosci N/A
+```{r}
+Autko[Autko == "?"] <- NA
+```
+```{r}
+```
+
+##### - Zastępowanie wartości NULL średnią
+```{r}
+Autko$horsepower <- ifelse(is.na(Autko$horsepower), mean(Autko$horsepower, na.rm=TRUE), Autko$horsepower)
+```
+```{r}
+```
+
+##### - Zamiana brandów na odpowiednie nazwy
+```{r}
+Autko$brand[Autko$brand == "chevroelt"] <- "chevrolet"
+Autko$brand[Autko$brand == "maxda"] <- "mazda"
+Autko$brand[Autko$brand == "vokswagen"] <- "volkswagen"
+Autko$brand[Autko$brand == "toyouta"] <- "toyota"
+Autko$brand[Autko$brand == "vw"] <- "volkswagen"
+Autko$brand[Autko$brand == "mercedes-benz"] <- "mercedes"
+```
+```{r}
+```
+
+##### - Zamiana na factory
+```{r}
+Autko$brand = Autko$brand %>%
+  factor(labels = sort(unique(Autko$brand)))
+```
+```{r}
+```
+
+## Statystyka
+
+
+##### - Aby wyliczyć wszystkie miary statystyczne została utworzona funkcja:
+ 
+```{r}
+library(knitr)
+library(e1071)
+funkcja_pomiary_statystyczne <- function(wektor){
+  srednia_arytm <- mean(wektor)
+  mediana <- median(wektor)
+  dominanta <- funkcja_dominanta(wektor)
+  kwartyl1 <- as.numeric(quantile(wektor, probs = 0.25))
+  kwartyl3 <- as.numeric(quantile(wektor, probs = 0.75))
+  wariancja <- var(wektor)
+  wariancja_Obc <- wariancja * (length(wektor) - 1)/length(wektor)
+  odchyl_stand <- sqrt(wariancja)
+  odchyl_stand_Obc <- sqrt (wariancja_Obc)
+  odchyl_przec <- sum(abs(wektor - srednia_arytm))/length(wektor)
+  odchyl_cwiart <- (kwartyl3 - kwartyl1)/2
+  klas_wspol_zmienn <- odchyl_stand/srednia_arytm
+  pozyc_wspol_zmienn <- odchyl_cwiart/mediana
+  kurtoza <- kurtosis(wektor)
+  eksces <- kurtoza - 3
+  wsk_asymetrii <- kwartyl3 - (2 * mediana) + kwartyl1
+  wspol_asymertii <- wsk_asymetrii / (2 * odchyl_cwiart)
+  dol_typ_obsz_zmienn <- srednia_arytm - odchyl_stand
+  gor_typ_obsz_zmienn <- srednia_arytm + odchyl_stand
+   
+  rezultat <- c(srednia_arytm, mediana, dominanta, kwartyl1, kwartyl3, wariancja,
+                wariancja_Obc, odchyl_stand, odchyl_stand_Obc, odchyl_przec,
+                odchyl_cwiart, klas_wspol_zmienn, pozyc_wspol_zmienn, kurtoza,
+                eksces, wsk_asymetrii, wspol_asymertii, dol_typ_obsz_zmienn,
+                gor_typ_obsz_zmienn)
+ 
+  return(rezultat)
+}
+ 
+```
+ 
+##### - Do obliczenia dominanty należało napisać dodatkową funkcję:
+```{r}
+funkcja_dominanta <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+```
+ 
+##### - Wszystkie dane zostały zaokrąglone do 4 miejsca po przecinku:
+```{r}
+mpg_ <- round( funkcja_pomiary_statystyczne(Autko$mpg), digits = 4)
+acceleration_ <- round(funkcja_pomiary_statystyczne(Autko$acceleration), digits = 4)
+displacement_ <- round(funkcja_pomiary_statystyczne(Autko$displacement), digits = 4)
+horsepower_ <-  round(funkcja_pomiary_statystyczne(Autko$horsepower), digits = 4)
+weight_ <- round(funkcja_pomiary_statystyczne(Autko$weight), digits = 4)
+```
+ 
+##### - Oraz zapisane w formacie date frame:
+```{r}
+tmp <- data.frame(mpg_, acceleration_,displacement_, horsepower_, weight_)
+```
+ 
+##### - Zostały również nazwane wszystkie wiersze tabeli:
+```{r}
+row.names(tmp) <- c("srednia arytmetyczna: ", "mediana: ", "dominanta: ", "kwartyl 0.25: ", "kwartyl 0.75: ",
+                    "wariancja: ", "wariancja obciazona: ", "odchylenie standardowe: ",
+                    "odchylenie standardowe obciazone: ", "odchylenie przecietne: ",
+                    "odchylenie cwiartkowe: ", "klasyczny wspolczynnik zmiennosci: ",
+                    "pozycyjny wspolczynnik zmiennosci: ", "kurtoza: ", "eksces: ",
+                    "wskaznik asymetrii: ", "wspolczynnik asymetrii: ",
+                    "dolna granica typowego obszaru zmiennosci: ",
+                    "gorna granica typowego obszaru zmiennosci: ")
+```
+ 
+I tak obliczone i zapisane pomiary możemy wypisać:
+```{r}
+print(tmp)
+```
+ 
+Po wyliczeniu miar charakteryzujących rozkład, dokonano ich analizy dla wybranych cech ilościowych wybranej bazy:
+ 
+### MPG (miles per gallons)
+Typowe wartości cechy mpg znajdują się w zakresie od 15,7 do 31,33. W tym zakresie mieści się średnia arytmetyczna oraz mediana. Miara odchylenia standardowego wynosi około 1/3 wartości średniej, dlatego możemy przyjąć, że wyliczona średnia jest w miarę trafną wartością dla danych. Klasyczny współczynnik zmienności, czyli procent odchylenia standardowego w średniej arytmetycznej, wynosi 33% i oznacza, że wyniki nie są odchylone w bardzo dużym stopniu od średniej. Na podstawie wskaźnika i współczynnika asymetrii, możemy wnioskować, że asymetria wyników jest prawostronna i jest niewielka. Na prawostronną asymetrię również wskazuje mniejsza wartość dominanty w stosunku do średniej arytmetycznej. Wyliczony eksces określa nam poziom koncentracji wokół średniej, który jest niższy niż w rozkładzie normalnym.
+ 
+### ACCELERATION
+Przyspieszanie (acceleration) przyjmuje typowe wartości w zakresie od 12,81 do 18,33. Mediana oraz średnia arytmetyczna zawierają się w tym przedziale i mają bardzo zbliżone do siebie wartości. Klasyczny współczynnik zmienności wynosi w przybliżeniu 18% i informuje nas o bardzo małej zmienności wartości wokół średniej. Wskaźnik oraz współczynnik asymetrii są równe 0, więc występuje tutaj symetria wyników. Eksces przyjmuje wartość ujemną, więc poziom koncentracji wyników wokół średniej jest niższy niż w rozkładzie normalnym.
+ 
+### DISPLACEMENT
+Typowe wartości cechy displacement znajdują się w zakresie od 89,16 do 297,70. W tym przedziale zawierają się średnia arytmetyczna oraz mediana. Klasyczny współczynnik zmienności wynosi 53,91% co wskazuje na dużą zmienność wartości w okolicy średniej arytmetycznej. Wskaźnik asymetrii ma wartość dodatnią, dlatego możemy stwierdzić, że asymetria jest prawostronna. Współczynnik określa, że jest to duża asymetria. Dominanta również w tym przypadku jest mniejsza od średniej arytmetycznej co utwierdza nas w prawostronnej asymetrii. Obliczony poziom koncentracji wokół średniej w stosunku do poziomu koncentracji w rozkładzie normalnym jest o wiele niższy.  
+ 
+### HORSEPOWER
+Cecha horsepower przyjmuje typowe wartości w przedziale od 66,27 do 142,67. W tym przedziale znajdują się średnia arytmetyczna i mediana. Klasyczny współczynnik zmienności wynosi około 37%. Wskazuje to na małą zmienność wartości cechy dookoła średniej. Wskaźnik asymetrii wskazuje na występowanie asymmetrii prawostronnej. Jest to jednak mała asymetria o czym informuje nas współczynnik asymetrii. Poziom koncentracji wokół średniej jest niższy w porównaniu z koncentracją w rozkładzie normalnym.
+ 
+### WEIGHT
+Typowe wartości określające wagę samochodów (weight) mieszczą się w zakresie od 2123,58 do 3817,27. średnia arytmetyczna, mediana oraz dominanta zawierają się w tym przedziale. Klasyczny wspołczynnik zmienności wynosi 28,51%. Oznacza to niewielką zmienność wartości cechy dookoła średniej. Wskaźnik asymetrii jest dodatni, co określa że asymetria jest prawostronna. Niski współcznynnik asymetrii wskazuje, że nie jest to silna asymetria. Wartość dominanty jest mniejsza od średniej co również wskazuje na występowanie prawostronnej asymetrii. Wyliczony eksces jest ujemny. Mówi nam to o niższej koncentracji wartości wokół średniej w porównaniu do koncentracji w rozkładzie normalnym.
+
+
+## Wykresy słupkowe
+ 
+Wykres słupkowy jest jedną z graficznych możliwości przedstawiania i prezentacji danych statystycznych.  
+Stosuje się je do ilustracji struktury szeregów strukturalnych, przedziałowych, przestrzennych i czasowych.
+Wykresy słupkowe mają postać prostokątów (słupków) równoległych do siebie.
+Każdy z prostokątów przedstawia liczebność danego wariantu cechy.
+ 
+Tak tworzy się wykres słupkowy:
+```{r}
+```
+##### - dla Cylinders,
+```{r}
+barplot(table(Autko$cylinders), main = "Cylindry", xlab = "Ilość cylindrów", col = "sky blue")
+```
+```{r}
+```
+ 
+Z wykresu wynika, że najwięcej aut ma parzystą liczbę cylindrów.
+Najwięcej aut jest wyposarzone w 4 cylindry, dwa razy mniej aut
+posiada 8 bądź 6 cylindrów.
+ 
+ 
+##### - dla Model_year,
+```{r}
+barplot(table(Autko$model_year), main = "Rok produkcji", xlab = "Rok", col = "sky blue")
+```
+```{r}
+```
+ 
+Najwięcej aut pochodzi z rocznika 73., lecz nie jest to wielka różnica
+w porównaniu do innych lat.
+ 
+ 
+##### - dla Origin,
+```{r}
+barplot(table(Autko$origin), main = "Pochodzenie", xlab = "Numer", col = "sky blue")
+```
+```{r}
+```
+ 
+Największa liczba aut pochodzi ze Stanów Zjednoczonych (1),
+auta wyprodukowane w Japoni (3) oraz Europie (2) stanowią
+mniejszy odsetek.
+ 
+## Histogramy
+ 
+Histogram to zestawienie danych statystycznych w postaci wykresu
+powierzchniowego złożonego z przylegających do siebie słupków,
+których wysokość ilustruje liczebność występowania badanej cechy
+w populacji lub jej próbie, a podstawy są rozpiętościami przedziałów
+klasowych.
+ 
+Aby uzyskać taki wykres należy:
+```{r}
+```
+- ustalić wartości cechy minimalnej i maksymalnej
+```{r}
+```
+- obliczyć rozstęp przedziałów klasowych
+```{r}
+```
+- obliczyć ilość rekordów
+```{r}
+```
+- obliczyć liczbę klas
+```{r}
+```
+- obliczyć długość klas (szerokość przedziałów)
+```{r}
+```
+- określić wartości dla poszczególnych przedziałów
+```{r}
+```
+ 
+```{r}
+wynik <- function(x)
+{
+  min <- min(x, na.rm = TRUE)
+  max <- max(x, na.rm = TRUE)
+  zakres <- as.numeric(max - min)
+  ilosc <- as.numeric(nrow(Autko))
+  pierwiastek <- sqrt(ilosc)
+  pierwiastek <- ceiling(pierwiastek)
+  szer <- zakres / pierwiastek
+  szer <-szer[1]
+  pkt = seq(min, max, by = szer)
+  rezultat <- c(min, max, szer, pkt)
+  return(rezultat)
+}
+```
+ 
+Teraz możemy zapisać wszystkie dane w wektorze:
+```{r}
+mpg<-wynik(Autko$mpg)
+dis<-wynik(Autko$displacement)
+kg<-wynik(Autko$weight)
+pow<-wynik(Autko$horsepower)
+acc<-wynik(Autko$acceleration)
+```
+ 
+Następnie określamy przedziały:
+```{r}
+przedzialmpg <- cut(Autko$mpg, mpg[-c(1,2,3)], right = FALSE, include.lowest = TRUE)
+przedzialdis <- cut(Autko$displacement, dis[-c(1,2,3)], right = FALSE, include.lowest = TRUE)
+przedzialpow <- cut(Autko$horsepower, pow[-c(1,2,3)], right = FALSE, include.lowest = TRUE)
+przedzialkg <- cut(Autko$weight, kg[-c(1,2,3)], right = FALSE, include.lowest = TRUE)
+przedzialacc <- cut(Autko$acceleration, acc[-c(1,2,3)], right = FALSE, include.lowest = TRUE)
+```
+ 
+Na koniec musimy wyznaczyć jeszcze szeregi rozdzielcze:
+```{r}
+szeregmpg <- table(przedzialmpg)
+szeregdis <- table(przedzialdis)
+szeregpow <- table(przedzialpow)
+szeregkg <- table(przedzialkg)
+szeregacc <- table(przedzialacc)
+```
+ 
+Teraz możemy utworzyć histogram:
+```{r}
+```
+##### - dla MPG,
+```{r}
+ggplot(Autko, aes(x=mpg)) + geom_histogram(breaks =  mpg[-c(1,2,3)] , aes(y=..density..),  colour="black", fill="white") + geom_density(alpha=.2, fill="blue") + labs(title = "Histogram mpg")
+```
+```{r}
+```
+Rozkład jest prawostronnie skośny.
+ 
+##### - dla Displacement,
+```{r}
+ggplot(Autko, aes(x=displacement)) + geom_histogram(breaks = dis[-c(1,2,3)], aes(y=..density..),  colour="black", fill="white") + geom_density(alpha=.2, fill="blue") + labs(title = "Histogram displacement")
+```
+```{r}
+```
+Rozkład jest wielomodalny.
+ 
+##### - dla Horsepower,
+```{r}
+ggplot(Autko, aes(x=horsepower)) +  geom_histogram(breaks = pow[-c(1,2,3)], aes(y=..density..),  colour="black", fill="white") + geom_density(alpha=.2, fill="blue") + labs(title = "Histogram horsepower")
+```
+```{r}
+```
+Rozkład jest dwumodalny.
+ 
+##### - dla Weight,
+```{r}
+ggplot(Autko, aes(x=weight)) + geom_histogram(breaks = kg[-c(1,2,3)], aes(y=..density..),  colour="black", fill="white") + geom_density(alpha=.2, fill="blue") + labs(title = "Histogram weight")
+```
+```{r}
+```
+Rozkład jest prawostronnie skośny.
+ 
+##### - dla Acceleration.
+```{r}
+ggplot(Autko, aes(x=acceleration)) + geom_histogram(breaks =acc[-c(1,2,3)]   , aes(y=..density..),  colour="black", fill="white") + geom_density(alpha=.2, fill="blue") + labs(title = "Histogram acceleration")
+```
+```{r}
+```
+Rozkład jest normalny.
+
+## Boxploty
+
+
+wykres skrzynkowy niesie ze sobą sporo różnych informacji na temat rozkładu mierzonej zmiennej. Wykres skrzynkowy jest wykresem symetrycznym z punktu widzenia jego poszczególnych elementów. Oczywiście zdarza się, że górny wąs jest dłuższy, a dolny krótszy. Czasami obserwacje odstające są tylko na górze, a czasami tylko na dole. W takim sensie wykres skrzynkowy może być bardzo asymetryczny.
+
+“Podłoga” i “sufit” skrzynki to  wartości zamykające skrzynkę z dołu i z góry to wyniki pierwszego kwartyla (Q1) i trzeciego kwartyla (Q3).
+
+Pozioma linia wewnątrz skrzynki prezentuje wartość mediany, czyli drugiego kwartyla.
+
+##### - dla MPG i Model_year
+```{r}
+ggplot(Autko,  aes(x=model_year, y=mpg, fill=model_year)) + 
+  geom_boxplot()  +
+  xlab("Rok") + ylab("MPG")+
+   theme(axis.title.x = element_text( face="bold"))+
+  theme(axis.title.y= element_text( face="bold")) +
+  theme(plot.title = element_text(size = 15,  face= 'bold' )) +
+  labs(title = "Boxplot Rok i MPG") + scale_y_continuous(breaks =  seq(0,50, by=5)) + 
+  scale_fill_discrete(name = "", labels = c("Rok 1970", "Rok 1971",  "Rok 1972", "Rok 1973", "Rok 1974",
+                                            "Rok 1975", "Rok 1976", "Rok 1977", "Rok 1978", "Rok1979",
+                                            "Rok 1980", "Rok 1981", "Rok 1982"))+ stat_summary(fun.y=mean, geom="point", shape=20, size=8, color="red", fill="red") 
+
+
+```
+```{r}
+```
+
+ 
+##### - dla Origin i MPG
+```{r}
+Autko%>%ggplot(aes(x=origin,y=mpg))+geom_boxplot()+geom_jitter(aes(color=cylinders),width = 0.1)+ 
+  scale_x_discrete(labels = c("Origin 1", "Origin 2","Origin 3"))+
+  scale_color_brewer(name="Cylindry",type = "qual", palette=3)+scale_fill_manual() + 
+  xlab("") + ylab("MPG")+
+  theme(axis.title.x = element_text( face="bold"))+
+  theme(axis.title.y= element_text( face="bold")) +
+  theme(plot.title = element_text(size = 15,  face= 'bold' ))+ labs(title = "Boxplot Origin i MPG z zaznaczonymi cylindrami")
+
+```
+```{r}
+```
+
+ 
+##### - dla Cylindrów i Wagi
+```{r}
+ggplot(Autko, aes(cylinders,weight,fill=cylinders)) +
+  geom_boxplot()  +   theme(axis.title.x = element_text( face="bold"))+
+  theme(axis.title.y= element_text( face="bold")) +  xlab("Cylindry") + 
+  ylab("Waga") + labs(title = "Boxplot Cylindrów i Wagi") +
+ stat_summary(fun.y=mean, geom="point", shape=20, size=8, color="red", fill="red") 
+
+
+
+
+```
+```{r}
+```
+
+
+##### - dla Origin i Wagi
+```{r}
+Autko%>%ggplot(aes(x=origin,y=weight))+geom_boxplot()+geom_jitter(aes(color=cylinders),width = 0.1)+ 
+  scale_x_discrete(labels = c("Origin 1", "Origin 2","Origin 3"))+
+  scale_color_brewer(name="Cylindry",type = "qual", palette=3)+scale_fill_manual() + 
+  xlab("") + ylab("Waga")+
+  theme(axis.title.x = element_text( face="bold"))+
+  theme(axis.title.y= element_text( face="bold")) +
+  theme(plot.title = element_text(size = 15,  face= 'bold' ))+ labs(title = "Boxplot Origin i Weight z zaznaczonymi cylindrami")
+
+```
+```{r}
+```
+
+
+## Cumulative distribution function plot
+## Wykres funkcji rozkładu skumulowanego
+ 
+Procent skumulowany - to statystyczna miara, określająca jaki odsetek "osób",
+w tym przypadku samochodów, uzyskał pewien zakres wyników.
+Jak sama nazwa wskazuje jest to procent złożony z dodawania procentów dla pojedyńczych kategorii - następuje kumulacja.
+ 
+Dzięki temu w łatwy sposób (bez dodawania) określić odsetek(procent/prawdopodobieństwo) samochodów przyjmujących pewien zakres, <br/>licząc od początku do danej wartości.
+ 
+ 
+Aby uzyskać taki wykres należy:
+```{r}
+```
+- uzyskać dane i obliczyć kluczowe statystyki podsomowujące,
+```{r}
+```
+- wyodrębnić wektor danych "mpg" dla Auto-Mpg,
+```{r}
+mpg = Autko$mpg
+```
+- obliczyć liczbę nie brakujących wartości w "mpg"
+```{r}
+n = sum(!is.na(mpg));
+```
+- uzyskać empiryczne wartości CDF
+```{r}
+mpg.ecdf = ecdf(mpg)
+```
+ 
+Teraz możemy wykreślić empiryczną funkcję rozkłądu skumulowanego (za pomocą ecdf() i plot()):
+```{r}
+plot(mpg.ecdf, xlab = 'MPG - Miles Per Gallon', ylab = 'Prawdopodobienstwo', main = 'Empiryczny rozkład skumulowany\nMPG samochodów')
+```
+ 
+Zatem samochodóW spalających 20 galonów na milę i mniej jest około 38%.
+```{r}
+```
+Samochodów spalających 30 galonów na milę jest 80%.
+```{r}
+```
+Dla ostatniej możliwej kategorii/opcji procent zawsze będzie wynosił 100%,
+gdyż "wyczerpuje" on wszystkie pozostałe kategorie/opcje.
+ 
+<br/>
+<br/>
+ 
+## QQ plots
+## Wykresy QQ
+ 
+Wykres QQ (kwantylowo-kwantylowy) ukazuje nam korelację pomiędzy daną próbką,
+a rozkładem normalnym.<br/>Rysowana jest również 45 stopniowa linia odniesienia.<br/>
+Wykresy QQ to narzędzie graficzne pomagające nam ocenić, czy zbiór danych pochodzi z jakiegoś teoretycznego rozkładu (normalny, wykładniczy).
+Jest to kontrola wizualna, a nie hermetyczny dowód, więc jest ona subiektywna.
+ 
+ 
+Aby uzyskać taki wykres należy:
+```{r}
+```
+- utworzyć normalny wykres zmiennej -> qqnorm(),
+```{r}
+```
+- dodać linię odniesiena -> qqline(),
+```{r}
+```
+ 
+Teraz możemy utworzyć wykres QQ:
+```{r}
+```
+##### - dla MPG,
+```{r}
+qqnorm(Autko$mpg, pch=1, frame=FALSE, main="QQ plot - MPG")
+qqline(Autko$mpg, col='red', lwd=2)
+```
+```{r}
+```
+ 
+##### - dla Displacement,
+```{r}
+qqnorm(Autko$displacement, pch=1, frame=FALSE, main="QQ plot - Displacement")
+qqline(Autko$displacement, col='red', lwd=2)
+```
+```{r}
+```
+##### - dla Horsepower,
+```{r}
+qqnorm(Autko$horsepower, pch=1, frame=FALSE, main="QQ plot - Horsepower")
+qqline(Autko$horsepower, col='red', lwd=2)
+```
+```{r}
+```
+##### - dla Weight,
+```{r}
+qqnorm(Autko$weight, pch=1, frame=FALSE, main="QQ plot - Weight")
+qqline(Autko$weight, col='red', lwd=2)
+```
+```{r}
+```
+##### - dla Acceleration.
+```{r}
+qqnorm(Autko$acceleration, pch=1, frame=FALSE, main="QQ plot - Acceleration")
+qqline(Autko$acceleration, col='red', lwd=2)
+```
+```{r}
+```
+ 
+Jeśli wszystkie punkty opadają w przybliżeniu wzdłuż linii odniesienia
+to możemy założyć normalność.
+<br/>Jesli natomiast punkty tworzą krzywą zamiast linię prostą to w tym momencie mamy do czynienia z wypaczeniem danych próbki.
+ 
+ 
+## Scatterplot matrix (by class)
+## Wykres macierzy rozrzutu (według klasy)
+ 
+Macierz rozrzutu umożliwia nam zwizualizowanie korelacji małych zestawów danych.
+Wykres macierzy rozrzutu pokazuje nam wszystkie pary wykresów rozrzutu zmiennych w jednym widoku w formacie macierzy.
+ 
+ 
+Aby uzyskać wykres macierzy rozrzutu należy:
+```{r}
+```
+- utworzyć podstawowy wykres za pomocą -> pairs(),
+```{r}
+pairs(Autko[c(1,3,4,5,6)], pch = 19)
+```
+```{r}
+```
+- można usunąć dolną część wykresu,
+```{r}
+pairs(Autko[c(1,3,4,5,6)], pch = 19, lower.panel=NULL)
+```
+```{r}
+```
+- można pokolorować punkty poprzez poszczególną klasę (np. origin) w celu lepszego zobrazowania korelacji,
+```{r}
+my_cols <- c("#FF0000", "#00FF00", "#0000FF")  
+pairs(Autko[c(1,3,4,5,6)], pch = 19,  cex = 0.5,
+      col = my_cols[Autko$origin],
+      lower.panel=NULL)
+```
+
+``
+## Wyznaczenie przedziałów ufności dla wartości oczekiwanej, wariancji i rozkładu t-Gosseta
+ 
+### Utworzenie funkcji do obliczania przedziałów
+```{r, message=FALSE}
+library(knitr)
+library(kableExtra)
+przedzialy <- function(x)
+{
+  srednia = mean(x, na.rm =  TRUE)
+  sd <- sd(x, na.rm = TRUE)
+  przedz90norm  <- round(srednia+c(-1, 1)*sd/sqrt(398)*qnorm(.95), 2)
+  przedz95norm <- round(srednia+c(-1, 1)*sd/sqrt(398)*qnorm(.975), 2)
+  przedz99norm <- round(srednia+c(-1, 1)*sd/sqrt(398)*qnorm(.995), 2)
+  przedz90war <- round(sqrt(sd*398/qchisq(c(1-.05,.05), 397)), 2)
+  przedz95war <- round(sqrt(sd*398/qchisq(c(1-.025,.025), 397)), 2)
+  przedz99war <- round(sqrt(sd*398/qchisq(c(1-.005,.005), 397)), 2)
+  przedz90t <- round(srednia+c(-1, 1)*sd/sqrt(398)*qt(.95, 397), 2)
+  przedz95t <- round(srednia+c(-1, 1)*sd/sqrt(398)*qt(.975, 397), 2)
+  przedz99t <- round(srednia+c(-1, 1)*sd/sqrt(398)*qt(.995, 397), 2)
+ 
+  rezultat <- c(przedz90norm,przedz95norm, przedz99norm,  przedz90war,przedz95war,
+                przedz99war, przedz90t, przedz95t, przedz99t)
+ 
+  return(rezultat)
+}
+```
+### Przypisanie odpowiednim zmiennym rezultatów wykonania funkcji
+```{r, message=FALSE, results=FALSE}
+accp <- przedzialy(Autko$acceleration)
+mpgp <- przedzialy(Autko$mpg)
+disp <- przedzialy(Autko$displacement)
+horsep <- przedzialy(Autko$horsepower)
+kgp <- przedzialy(Autko$weight)
+```
+### Umieszczenie wcześniej utworzonych zmiennych w tabeli
+```{r}
+przedzialy <- data.frame(mpgp, accp , disp, horsep, kgp)
+```
+### Odpowiednie nazwanie tabeli z wyznaczonymi przedziałami
+```{r, message=FALSE}
+row.names(przedzialy) <- c("początek przedziału dla ufności 90% dla wartości oczekiwanej"  , "koniec  przedziału dla ufności 90% dla wartości oczekiwanej",
+                    "początek przedziału dla ufności 95% dla wartości oczekiwanej"  , "koniec  przedziału dla ufności 95% dla wartości oczekiwanej",
+                    "początek przedziału dla ufności 99% dla wartości oczekiwanej"  , "koniec  przedziału dla ufności 99% dla wartości oczekiwanej",
+                    "początek przedziału dla ufności 90% dla wariancji"  , "koniec  przedziału dla ufności 90% dla wariancji",
+                    "początek przedziału dla ufności 95% dla wariancji"  , "koniec  przedziału dla ufności 95% dla wariancji",
+                    "początek przedziału dla ufności 99% dla wariancji"  , "koniec  przedziału dla ufności 99% dla wariancji",
+                    "początek przedziału dla ufności 90% dla rozkładu t-Gosseta"  , "koniec  przedziału dla ufności 90% dla rozkładu t-Gosseta",
+                    "początek przedziału dla ufności 95% dla rozkładu t-Gosseta"  , "koniec  przedziału dla ufności 95% dla rozkładu t-Gosseta",
+                    "początek przedziału dla ufności 99% dla rozkładu t-Gosseta"  , "koniec  przedziału dla ufności 99% dla rozkładu t-Gosseta")
+colnames(przedzialy) <- c("MPG", "Acceleration", "Displacement",  "Horsepower", "Weight")
+```
+### Otrzymane przedziały
+```{r}
+kable(przedzialy, caption = "Wyznaczone przedziały ufności") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+ 
+## Sprawdzenie normalności rozkładu danej zmiennej
+> W celu sprawdzenia, czy dana zmienna opisana jest rozkładem normalnym (rozkładem Gaussa-Laplace'a) utworzono funkcję korzystającą z testu Shapiro-Wilka. Następnie dla każdej zmiennej dla której istniał sens zweryfikowania rozkładu wykonano tą funkcję.
+ 
+### Utworzenie funkcji sprawdzającej czy rozkład jest normalny
+```{r}
+normalnosc_rozkladu <- function(x)
+{
+ sh_test <- shapiro.test(x)
+ sh_result <- sh_test$p.value
+ return(sh_result)
+}
+```
+ 
+### Wykonanie funkcji dla zmiennych i zapisanie rezultatów
+```{r}
+accn <- normalnosc_rozkladu(Autko$acceleration)
+mpgn <- normalnosc_rozkladu(Autko$mpg)
+disn <- normalnosc_rozkladu(Autko$displacement)
+horsen <- normalnosc_rozkladu(Autko$horsepower)
+kgn <- normalnosc_rozkladu(Autko$weight)
+```
+### Umieszczenie rezultatów w tabeli oraz jej odpowiednie nazwanie
+```{r}
+normalnosc <- data.frame(accn, mpgn, disn, horsen, kgn)
+row.names(normalnosc) <- c("P-value")
+colnames(normalnosc) <- c("Acceleration", "MPG", "Displacement", "Horsepower", "Weight")
+```
+
+### Otrzymane wyniki:
+```{r}
+kable(normalnosc, caption = "Wyznaczone p-value") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+> Interpretacja danych z tabeli: P-value wyznaczono w celu oceny, czy dana zmienna opisana jest rozkładem normalnym. Gdy otrzymane p-value jest większe niż 0.05, można przyjąć że zmienna opisana jest rozkładem normalnym. W przypadku naszych danych żadna ze sprawdanych zmiennych nie jest opisana takim rozkładem, jednak najbliżej rozkładu normalnego jest rozkład zmiennej "Acceleration". Wartości 0 w tabeli oznaczają liczby tak małe, że nie było sensu zapisywania ich w notacji.
+ 
+## Testowanie hipotez
+> Przetestowano różne hipotezy których treści dobrano odpowiednio do naszego zestawu danych. Wszystkie przeprowadzone testy wraz z ich opisem i interpretacją znajdują się poniżej.
+ 
+### Utworzenie funkcji potrzebnych do przeprowadzenia testów
+#### Funkcja do testu dwóch średnich
+```{r, message=FALSE}
+dwie_srednie <- function(x, y)
+{
+ ds.test <- t.test(x, y, paired = F)
+ ds.p <- ds.test$p.value
+ ds.przedzial95 <- round(ds.test$conf.int, 2)
+ ds_list <- list("p_value" = ds.p, "przedzial95" = ds.przedzial95)
+ return(ds_list)
+}
+```
+### Czy auta ważące więcej niż 3000 funtów przyspieszają inaczej niż auta lżejsze?
+##### H0: Samochody ważące więcej niż 3000 funtów mają średnie przyspieszenie takie jak auta lżejsze
+##### H1: Samochody ważące więcej niż 3000 funtów średnio przyspieszają wolniej/szybciej niż auta lżejsze
+#### Przeprowadzenie testu dwóch średnich
+```{r}
+accel_3000 <- dwie_srednie(Autko$acceleration[Autko$weight > 3000], Autko$acceleration[Autko$weight <= 3000])
+```
+#### Wyświetlenie wyników
+```{r}
+accel_3000$p_value
+accel_3000$przedzial95
+```
+> Interpretacja wyniku: Otrzymany przedział to [-2.06 -0.95] zatem odrzucamy hipotezę zerową i przyjmujemy alternatywną, czyli auta ważące ponad 3000 funtów średnio przyspieszają gorzej niż lżejsze samochody. Różnica w przyspieszeniu jest w przedziale [0.95 2.06].
+ 
+### Czy auta o pojemności większej niż 250 mają inną moc niż auta z mniejszymi silnikami?
+##### H0: Samochody o pojemności większej niż 250 mają średnią moc równą mocy aut o niższej pojemności
+##### H1: Samochody o pojemności większej niż 250 mają średnią moc większą/mniejszą niż auta o niższej pojemności
+#### Przeprowadzenie testu dwóch średnich
+```{r}
+horsepower_disp250 <- dwie_srednie(Autko$horsepower[Autko$displacement > 250], Autko$horsepower[Autko$displacement <= 250])
+```
+#### Wyświetlenie wyników
+```{r}
+horsepower_disp250$p_value
+horsepower_disp250$przedzial95
+```
+> Interpretacja wyniku: Otrzymano przedział [63.99 76.20], czyli hipoteza zerowa zostaje odrzucona. Samochody o pojemności większej niż 250 średnio mają wyższą moc niż auta z mniejszą pojemnością silnika. 
+ 
+### Czy auta ośmiocylindrowe spalają inne ilości paliwa w stosunku do aut sześciocylindrowych?
+##### H0: Samochody z silnikami ośmiocylindrowym średnio spalają tyle samo paliwa co auta sześciocylindrowe
+##### H1: Samochody z silnikami ośmiocylindrowymi spalają średnio więcej/mniej paliwa w stosunku do sześciocylindrowych
+#### Przeprowadzenie testu dwóch średnich
+```{r}
+mpg_8cyl_6cyl <- dwie_srednie(Autko$mpg[Autko$cylinders == 8], Autko$mpg[Autko$cylinders == 6])
+```
+#### Wyświetlenie wyników
+```{r}
+mpg_8cyl_6cyl$p_value
+mpg_8cyl_6cyl$przedzial95
+```
+> Interpretacja wyniku: Przedział wynikowy to [-6.01 -4.03] - odrzucamy hipotezę zerową. Średnie MPG dla samochodów ośmiocylindrowych jest mniejsze (różnica w przedziale [4.03 6.01]), czyli ich spalanie jest większe niż samochodów sześciocylindrowych.
+ 
+### Czy przyspieszenie aut amerykańskich jest inne niż przyspieszenie aut japońskich?
+##### H0: Samochody amerykańskie i japońskie średnio przyspieszają tak samo
+##### H1: Samochody amerykańskie średnio przyspieszają lepiej/gorzej niż samochody japońskie
+#### Przeprowadzenie testu dwóch średnich
+```{r}
+accel_am_jap <- dwie_srednie(Autko$acceleration[Autko$origin == 1], Autko$acceleration[Autko$origin == 3])
+```
+#### Wyświetlenie wyników
+```{r}
+accel_am_jap$p_value
+accel_am_jap$przedzial95
+```
+> Interpretacja wyniku: Hipoteza zerowa zostaje odrzucona. Otrzymany przedział mówi, że średnio samochody amerykańskie przyspieszają gorzej niż japońskie, a różnica jest w przedziale [0.58 1.69].
+ 
+### Czy przyspieszenie aut amerykańskich jest inne niż przyspieszenie aut europejskich?
+##### H0: Samochody amerykańskie i europejskie średnio przyspieszają tak samo
+##### H1: Samochody amerykańskie średnio przyspieszają lepiej/gorzej niż samochody europejskie
+#### Przeprowadzenie testu dwóch średnich
+```{r}
+accel_am_eu <- dwie_srednie(Autko$acceleration[Autko$origin == 1], Autko$acceleration[Autko$origin == 2])
+```
+#### Wyświetlenie wyników
+```{r}
+accel_am_eu$p_value
+accel_am_eu$przedzial95
+```
+> Interpretacja wyniku: Odrzucamy hipotezę zerową. Przedział [-2.55 -0.95] mówi, że auta amerykańskie mają gorsze średnie przyspieszenie niż europejskie. Przewaga europejskich jest w przedziale [0.95 2.55].
+ 
+### Czy kraj pochodzenia samochodu ma istotny wpływ na jego spalanie (MPG)?
+##### H0: Kraj pochodzenia samochodu nie ma istotnego wpływu na MPG
+##### H1: kraj pochodzenia samochodu ma istotny wpływ na MPG
+#### Przeprowadzenie testu ANOVA
+```{r}
+accelerationOriModel.0 <- lm(acceleration~1, data = Autko)
+accelerationOriModel.1 <- lm(acceleration~origin, data = Autko)
+anova(accelerationOriModel.0, accelerationOriModel.1)
+```
+> Interpretacja wyniku: W przypadku testu ANOVA do oceny prawdziwości hipotezy zerowej należy spojrzeć na p-value (Pr). W tym przypadku jest ono bardzo małe (1.002e-06) zatem hipoteza zerowa zostaje odrzucona na dowolnym racjonalnym poziomie istotności. Przyjmujemy zatem hipotezę alternatywną, czyli kraj pochodzenia samochodu ma istotny wpływ na jego spalanie.
+ 
+### Czy liczba cylindrów silnika samochodu ma istotny wpływ na jego spalanie?
+##### H0: Liczba cylindrów nie ma istotnego wpływu na spalanie
+##### H1: Liczba cylindrów ma istotny wpływ na spalanie samochodu
+#### Przeprowadzenie testu ANOVA
+```{r}
+mpgModel.0 <- lm(mpg~1, data = Autko)
+mpgModel.1 <- lm(mpg~cylinders, data = Autko)
+anova(mpgModel.0, mpgModel.1)
+```
+> Interpretacja wyniku: Podobnie jak w poprzednim teście, otrzymane p-value (Pr w rezultacie) jest pomijalnie małe (<2.2e-16) przez co hipoteza zerowa zostaje odrzucona. Wniosek - liczba cylindrów silnika samochodu ma istotny wpływ na jego spalanie.
+ 
+### Czy liczba cylindrów silnika ma istotny wpływ na jego przyspieszenie?
+##### H0: Liczba cylindrów nie ma istotnego wpływu na przyspieszenie
+##### H1: Liczba cylindrów ma istotny wpływ na przyspieszenie samochodu
+#### Przeprowadzenie testu ANOVA
+```{r}
+accelerationCylModel.0 <- lm(acceleration~1, data = Autko)
+accelerationCylModel.1 <- lm(acceleration~cylinders, data = Autko)
+anova(accelerationCylModel.0, accelerationCylModel.1)
+```
+> Interpretacja wyniku: Ponownie, otrzymane p-value jest bardzo małe (<2.2e-16) co stanowi podstawę do odrzucenia hipotezy zerowej. Przyjmujemy zatem hipotezę alternatywną i stwierdzamy, że liczba cylindrów silnika ma istotny wpływ na przyspieszenie samochodu.
+
+
+## Regresja Liniowa
+
+Rregresja Liniowa podobnie jak klasyfikacja należy do zagadnień uczenia z nadzorem (supervised learning). 
+Uczymy model tzn. na danych treningowych, ze znanymi wartościami Y. Model ma możliwie najtrafniej
+przewidywać wartości Y na nowych danych.
+
+ 
+Losowanie ziarna i wybieranie nowego testu i trainingu 
+```{r}
+set.seed(100)
+indexes <- sample(nrow(Autko), (0.7*nrow(Autko)), replace = FALSE)
+trainData <- Autko[indexes, ]
+testData <- Autko[-indexes, ]
+
+```
+
+- Regresja liniowa mpg i weight
+
+```{r}
+ggplot(data= Autko,aes(weight,mpg)) + geom_point()+ geom_smooth(method=lm) 
+model <- lm(weight~mpg, data= Autko)
+summary(model)
+
+
+```
+
+
+- Regresja liniowa  mpg i displacement
+```{r}
+
+ggplot(Autko,aes(displacement,mpg)) +geom_point()+geom_smooth(method=lm) 
+model <- lm(mpg~displacement, data= Autko)
+summary(model)
+
+```
+```{r}
+```
+
+- Regresja liniowa  weight i horsepower
+```{r}
+ggplot(Autko,aes(weight, horsepower)) + geom_point() +geom_smooth(method = lm)
+model <- lm(weight~horsepower, data= Autko)
+summary(model)
+```
+```{r}
+```
+
+
+
+Budowanie nowych danych do stworzenia korelacji, wybranie tylko kolumn numerycznych
+```{r}
+newdata <- cor(Autko[ , c('mpg','weight', 'displacement', 'horsepower', 'acceleration')], use='complete')
+corrplot(newdata, method = "number")
+```
+```{r}
+```
+Wykres korelacji
+```{r}
+ggcorrplot(newdata, hc.order = TRUE, 
+           type = "upper", 
+           lab = TRUE, 
+           lab_size = 3, 
+           method="circle", 
+           colors = c("tomato2", "white", "springgreen3"), 
+           title="Korelacja", 
+           ggtheme=theme_bw)
+```
+
+Silna korelację określa się, kiedy jest ona większa niż 0,6. 
+MPG z wszystkimi innymi kolumnami koreluje na minusie, posiada też wysoką korelację. 
+Największa korelację ma displacement i weight równą 0.93.
+
+Tworzenie regresji liniowej dla całego zbioru z wieloma predyktorami
+```{r}
+model <- lm(mpg~weight+horsepower+origin+model_year+displacement+acceleration,data = Autko)
+summary(model)
+```
+Jak widać acceleration i horsepower są statystycznie nieistotne
+
+Wykresy dla modelu
+```{r}
+plot(model)
+```
+
+Obliczenie błędu RMS
+```{r}
+predictions <- predict(model, newdata = testData)
+sqrt(mean((predictions - testData$mpg)^2))
+```
+
+Wykonujemy regresje liniową dla trainingowego zbioru
+```{r}
+regresja <- lm( mpg ~ cylinders + displacement + horsepower + weight  + acceleration + origin, data = trainData)
+summary(regresja)
+plot(regresja)
+```
+
+Displacement i Acceleration są nieistotne 
+Ponówny więc regresję
+
+```{r}
+regresja2<- lm(formula = mpg ~ cylinders + horsepower + weight, data = trainData)
+summary(regresja2)
+plot(regresja2)
+```
+
+Cylinder6 jest statystycznie nieistotne, ale należy zostawić tą zmienną z powodu na inne cylindry.
+
+Tworzymy ramkę danych dla zobaczenia wartości
+```{r}
+predykcja <- predict(regresja2, newdata = testData)
+```
+
+Różnica procentowa dla testowego zbioru
+
+```{r}
+wynik <- data.frame(model_year = testData$model_year,  prediction = predykcja,  actual = testData$mpg)
+roznicaproc <- abs(wynik$prediction - wynik$actual) / 
+  wynik$actual * 100
+wynik$roznicaproc <- roznicaproc
+remove(roznicaproc)
+paste("Procent różnicy:", round(mean(wynik$roznicaproc)))
+
+wynik$prediction <- round(wynik$prediction, 2)
+wynik$roznicaproc <- round(wynik$roznicaproc, 2)
+print(wynik)
+```
+
+14 procent różnicy nie jest dobrym wynikiem. Lepszym rozwiązaniem będzie drzewo decyzyjne
+
+## Tworzenie drzewa decyzyjnego
+```{r}
+library(rpart)
+regresTREE <- rpart(formula = mpg ~ ., data = testData)
+dpred <- predict(regresTREE , data = testData)
+
+plot(regresTREE, uniform=TRUE, main="Drzewo decyzyjne")
+text(regresTREE, use.n=TRUE, all=TRUE)
+
+wynik2 <- data.frame(model_year = testData$model_year, 
+                     prediction = dpred, 
+                     actual = testData$mpg)
+roznicaproc2 <- abs(wynik2$prediction - wynik2$actual) / 
+  wynik2$actual * 100
+wynik2$roznicaproc2 <- roznicaproc2
+remove(roznicaproc2)
+paste("Procent różnicy:", round(mean(wynik2$roznicaproc2)))
+```
+Aktualnie błąd jest równy tylko 6 %
+
+
+## Dendogram
+Ponowne losowanie ziarna i losowanie zbioru treningowego i testowego
+```{r}
+set.seed(100)
+indexes <- sample(nrow(Autko), (0.9*nrow(Autko)), replace = FALSE)
+trainData <- Autko[indexes, ]
+testData <- Autko[-indexes, ]
+theme_set(theme_bw())
+```
+
+
+Wyliczenie średnich i odchyleń, ustalenie dystansów
+
+```{r}
+Autko2<- testData[,-c(2,7,8,9,10)]
+mean_data <- apply(Autko2,2,mean)
+std<- apply(Autko2, 2,sd)
+#można to robić manualnie  (x - mean(x)) / sd(x) ale lepsze jest scaling
+Autko2<-scale(Autko2, mean_data, std)
+distance <- dist(Autko2)
+hc<-hclust(distance)
+
+```
+
+Przedstawienie na wykresie
+
+```{r}
+plot(hc, labels = testData$origin)
+#zakładamy 3 klastry, ponieważ są trzy wartości
+groups <- cutree(hc, k=3)
+#tworzenie borderów
+rect.hclust(hc, k=3, border="red")
+```
+
+
+## Metoda K - średnich
+
+Metoda k-średnich jest metodą należacą do grupy algorytmów analizy skupień tj. 
+analizy polegającej na szukaniu i wyodrębnianiu grup obiektów podobnych (skupień). 
+
+Wykres służący z zapoznaniem się rozmieszczenia originu
+```{r}
+ggplot(testData, aes(x= horsepower, y= displacement, color = origin)) + geom_point()
+```
+
+Wybranie odpowiednich kolumn i tworzenie klastrów
+```{r}
+testData<-testData %>% select(mpg,displacement, horsepower, weight, acceleration, model_year, origin) 
+#wiemy, że mają być 3 klastry 
+k.cluster <- kmeans(testData[,c(1:6)],3, nstart = 20)
+#Wypisanie środków klastrów
+print(k.cluster$centers)
+```
+
+
+Przedstawienie klastrów
+```{r}
+table(testData$origin, k.cluster$cluster)
+```
+Pierwszy klaster jest dobrze dopasowany, w drugim pojawia się szum chociaż jest zdecydowanie lepszy od trzeciego
+
+Wykres klastrów
+```{r}
+library(cluster) 
+clusplot(testData, k.cluster$cluster, color=TRUE, shade=TRUE, labels=0,lines=0)
+```
+Pokrycie wynosi tylko 81,13% 
+
+
+
+## Wykresy obrazujące analizę zbioru
+Wyliczenie najpopularniejszych marek, obliczenie średniej i wyłuskanie wartości
+
+```{r}
+namesOccurence <- Autko %>% group_by(brand) %>% tally() %>% rename(Number_of_Occurences = n)
+
+```
+
+Wykres najpopularniejszych samochodów (top 20)
+
+```{r}
+
+namesOccurence  %>% top_n(20, Number_of_Occurences) %>% arrange(desc(Number_of_Occurences)) %>% ggplot(aes(x=brand, y=Number_of_Occurences)) +
+  geom_bar(stat='identity') +
+  coord_flip() +  
+  ggtitle("Najpopularniejsze samochody")+
+  xlab("Marki samochodów")+
+  ylab("Ilość") + 
+  theme_test() +
+  theme(plot.title = element_text(size = 15,  face= 'bold', margin = ))+
+  theme(legend.title =element_text(size = 40, face= 'bold'), legend.position = "bottom")+
+  theme(axis.title.x = element_text( face="bold"))+
+  theme(axis.title.y= element_text( face="bold")) 
+
+
+```
+
+Najpopularniejszymi markami jest Ford i Chevrolet 
+
+Przedstawienie na wykresie kołowym
+
+```{r}
+#wyliczenie procentów
+namesOccurence$procent <- round(namesOccurence$Number_of_Occurences / sum(namesOccurence$Number_of_Occurences), digits = 2)
+pie <- namesOccurence %>% filter(procent>0) %>%
+  ggplot(aes(x = "", y=procent ,fill = factor(brand))) + 
+  geom_bar(width = 1, stat = "identity") +
+  theme(axis.line = element_blank(), 
+        plot.title = element_text(hjust=0.5)) + 
+  labs(fill="marki", 
+       x=NULL, 
+       y=NULL, 
+       title="Wykres kołowy dla marek samochodowych")
+
+pie + coord_polar(theta = "y", start=0) +  geom_text(aes(x = 1.3, label = procent), position = position_stack(vjust = 0.5), size=2) 
+```
+
+Wykres MPG dla każdej marki 
+
+```{r}
+
+Autko %>% group_by(brand) %>% 
+  summarise(sredniam = mean(mpg, na.rm = TRUE))  %>%
+  ggplot(aes(x=brand, y=sredniam))+geom_bar(stat='identity')  + coord_flip()+
+  xlab("Marki samochodów") +ylab("Średnia mpg")+
+  ggtitle("Średnia MPG")+
+  theme(plot.title = element_text(size = 15,  face= 'bold', margin = ))+
+  theme(legend.title =element_text(size = 40, face= 'bold'), legend.position = "bottom")+
+  theme(axis.title.x = element_text( face="bold"))+
+  theme(axis.title.y= element_text( face="bold"))
+
+```
+
+Wykres ilości aut w danym roku 
+
+```{r}
+
+Autko%>% group_by(model_year) %>%summarise(ilosc = n()) %>% ggplot(aes(x=model_year,y= ilosc ), lty=5)+
+  geom_line(group=1)+
+  geom_point(size=2)+
+  theme_bw()+
+  theme(legend.position = "none")+  xlab("Rok") +ylab("Ilość")+
+  ggtitle("Ilość aut w danym roku")+
+  geom_text(label="") +
+  theme(axis.title.x = element_text( face="bold"))+
+  theme(axis.title.y= element_text( face="bold")) +
+  theme(plot.title = element_text(size = 15,  face= 'bold' ))
+
+```
+
+
+
+Wykres średnich horsepower i displacement w danym roku
+
+```{r}
+Autko %>% group_by(model_year)%>% summarise(srednia = mean(horsepower), srednia2 = mean(displacement)) %>%
+  ggplot(aes(x=model_year))+
+  geom_line(aes(x = model_year, y=srednia, group = 1),lty=2, size=0.8)+
+  geom_line(aes(x= model_year, y=srednia2, group = 1),size=1.2)+
+  scale_color_gradient(low = 'blue', high = 'red')+
+  theme_bw()+
+  annotate(geom="text", x=6,y=230,
+           label="displacement",color= "black", size=4 )+
+  annotate(geom="text", x=3,y=150,
+           label="horsepower",color= "black", size=4 ) +
+  ggtitle("Średnia dla horsepower i displacement w danym roku")+
+  theme(legend.position = "none")+
+  labs(x="Rok",y="") +
+  theme(axis.title.x = element_text( face="bold"))+
+  theme(axis.title.y= element_text( face="bold")) +
+  theme(plot.title = element_text(size = 15,  face= 'bold' ))
+
+```
+
+Z roku na rok można zauważyć spadek obu zmiennych
+
+Wykres przedstawiający średnie mpg dla danych marek 
+
+```{r}
+#Dodanie nowej kolumny określającej mpg
+Autko$mpgopt<- round((Autko$mpg - mean(Autko$mpg))/sd(Autko$mpg), 2)
+Autko$typ <- ifelse(Autko$mpgopt < 0, "pod", "nad")
+#Wykres
+Autko %>%group_by(brand) %>% ggplot(aes(x=brand, y=mpgopt, label=mpgopt)) + 
+  geom_bar(stat='identity', aes(fill=typ), width=.5)  +
+  scale_fill_manual(name="Według mpg", 
+                    labels = c("Powyżej średniej", "Poniżej średniej"), 
+                    values = c("nad"="#00ba38", "pod"="#f8766d")) + 
+  labs( title= "Średnie mpg dla danych marek") + 
+  coord_flip() + 
+  labs(x="Marka",y="Średnia mpg")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
